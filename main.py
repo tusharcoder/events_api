@@ -27,11 +27,12 @@ class EventResourceSchema(ma.Schema):
                 'created_at',
                 )
 events_resource_schema = EventResourceSchema(many=True)
+event_resource_schema = EventResourceSchema()
 class Hello(Resource):
     def get(self):
         return make_response({"message":"Hello World"},200)
 
-class EventResource(Resource):
+class AllEventResource(Resource):
     def get(self):
         """
         An api to return the list of all events
@@ -40,8 +41,21 @@ class EventResource(Resource):
         result = events_resource_schema.dump(events)
         return make_response(result, 200)
 
+class EventResource(Resource):
+    def get(self,id):
+        """
+        An api to return the specific event
+        """
+        event = db.session.query(EventModel).filter_by(id=id).first()
+        if not event:
+            return make_response({'message':'event id not exist...'}, 404)
+        else:
+            result = event_resource_schema.dump(event)
+            return make_response(result,200)
+
 api.add_resource(Hello,'/')
-api.add_resource(EventResource, '/events')
+api.add_resource(AllEventResource, '/events')
+api.add_resource(EventResource, '/event/<id>')
 
 if __name__=="__main__":
     app.run(host=HOST,port=8000, debug=True)
