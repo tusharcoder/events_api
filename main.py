@@ -1,4 +1,4 @@
-from flask import Flask, make_response
+from flask import Flask, make_response, request
 from flask.json import jsonify
 from flask_restful import Resource, Api
 from flask_sqlalchemy import SQLAlchemy
@@ -40,6 +40,26 @@ class AllEventResource(Resource):
         events = db.session.query(EventModel).all()
         result = events_resource_schema.dump(events)
         return make_response(result, 200)
+
+    def post(self):
+        """
+        An api to post the event
+        """
+        data=request.get_json()
+        title = data.get('title')
+        meeting_link = data.get('meeting_link')
+        errors = {}
+        if not title:
+            errors['title']='title is required'
+        if not meeting_link:
+            errors['meeting_link']='meeting_link is required'
+        if errors:
+            return make_response({'message':'unable to create event','errors':errors},400)
+        event = EventModel(title=title,meeting_link=meeting_link)
+        db.session.add(event)
+        db.session.commit()
+        result = event_resource_schema.dump(event)
+        return make_response({'message':'event created','data':result},201)
 
 class EventResource(Resource):
     def get(self,id):
