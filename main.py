@@ -73,6 +73,35 @@ class EventResource(Resource):
             result = event_resource_schema.dump(event)
             return make_response(result,200)
 
+    def put(self,id):
+        """
+        An api to update the specific event
+        """
+        event = db.session.query(EventModel).filter_by(id=id).first()
+        if not event:
+            return make_response({'message':'event id not exist...'}, 404)
+        else:
+            data = request.get_json()
+            title = data.get('title')
+            meeting_link = data.get('meeting_link')
+            event.title=title
+            event.meeting_link=meeting_link
+            db.session.commit()
+            result = event_resource_schema.dump(event)
+            return make_response(result,200)
+
+    def delete(self,id):
+            """
+            An api to delete the specific event
+            """
+            event = db.session.query(EventModel).filter_by(id=id).first()
+            if not event:
+                return make_response({'message':'event id not exist...'}, 404)
+            else:
+                db.session.delete(event)
+                db.session.commit()
+                return make_response({'message':'event deleted successfully'}, 201)
+
 api.add_resource(Hello,'/')
 api.add_resource(AllEventResource, '/events')
 api.add_resource(EventResource, '/event/<id>')
