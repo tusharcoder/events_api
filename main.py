@@ -15,8 +15,8 @@ app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///events.sqlite3'
 app.config['SECRET_KEY'] = 'd42340e0-7846-40cd-8f66-6f9d2d3ddfbb'
 api = Api(app)
-ma = Marshmallow(app)
 db=SQLAlchemy(app)
+ma = Marshmallow(app)
 HOST = "0.0.0.0"
 
 REQUIRED_ERROR_TEXT = 'this field is required'
@@ -26,7 +26,7 @@ def init_db(db):
     """
     this is the function responsible to initiate the db tables which are not there
     """
-    db.drop_all()
+    #db.drop_all()
     db.create_all()
 
 def tokin_required(func):
@@ -53,21 +53,33 @@ class UserModel(db.Model):
     public_id = db.Column(db.String(50), unique=True, nullable=False)
     username = db.Column(db.String(250), nullable=False, unique=True) # will store the email in here
     password = db.Column(db.String(2000), nullable=False)
+    events = db.relationship('EventModel',primaryjoin='EventModel.created_by==UserModel.id',lazy=True)
 
 class EventModel(db.Model):
     id = db.Column('id',db.Integer, primary_key=True)
     meeting_link=db.Column(db.Text,nullable=False,unique=True)
     title=db.Column(db.String(500),nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
+    created_by = db.Column(db.Integer, db.ForeignKey('user_model.id'))
+    user = db.relationship('UserModel',primaryjoin="UserModel.id==EventModel.created_by")
 
-class EventResourceSchema(ma.Schema):
+class UserResourceSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
+        model=UserModel
+        fields=('username',)
+        
+class EventResourceSchema(ma.SQLAlchemyAutoSchema):
+    user = ma.Nested(UserResourceSchema)
+    class Meta:
+        model = EventModel
         fields=(
                 'id',
                 'title',
                 'meeting_link',
                 'created_at',
+                'user',
                 )
+
 events_resource_schema = EventResourceSchema(many=True)
 event_resource_schema = EventResourceSchema()
 class Hello(Resource):
@@ -151,7 +163,7 @@ class AllEventResource(Resource):
             errors['meeting_link']='meeting_link is required'
         if errors:
             return make_response({'message':'unable to create event','errors':errors},400)
-        event = EventModel(title=title,meeting_link=meeting_link)
+        event = EventModel(title=title,meeting_link=meeting_link, created_by=request.user.id)
         db.session.add(event)
         db.session.commit()
         result = event_resource_schema.dump(event)
