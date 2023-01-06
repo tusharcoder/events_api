@@ -12,6 +12,20 @@ ma = Marshmallow(app)
 db=SQLAlchemy(app)
 HOST = "0.0.0.0"
 
+def init_db(db):
+    """
+    this is the function responsible to initiate the db tables which are not there
+    """
+    db.create_all()
+
+class UserModel(db.Model):
+    """
+    User model which stores the user information like username, password
+    """
+    id = db.Column('id',db.Integer, primary_key=True)
+    username = db.Column(db.String(250), nullable=False, unique=True) # will store the email in here
+    password = db.Column(db.String(2000), nullable=False)
+
 class EventModel(db.Model):
     id = db.Column('id',db.Integer, primary_key=True)
     meeting_link=db.Column(db.Text,nullable=False,unique=True)
@@ -31,6 +45,30 @@ event_resource_schema = EventResourceSchema()
 class Hello(Resource):
     def get(self):
         return make_response({"message":"Hello World"},200)
+
+class UserResource(Resource):
+    """
+    this is the user related views like registration, login
+    """
+    def post(self):
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+        REQUIRED_ERROR_TEXT = 'this field is required'
+        errors = {}
+        if not username:
+            errors['username']=REQUIRED_ERROR_TEXT
+        elif db.session.query(UserModel).filter_by(username=username).first():
+            errors['username']='User already exist with the provided username...'
+        if not password:
+            errors['password']=REQUIRED_ERROR_TEXT
+        if errors:
+            return make_response({"message":"Registration Unsuccessful...","errors":errors},400)
+        user = UserModel(username=username, password=password)
+        db.session.add(user)
+        db.session.commit()
+        return {"message":"Registration Successful"},201 # this is automatically covert to json and return as response by Flask-Restful
+        
 
 class AllEventResource(Resource):
     def get(self):
@@ -103,8 +141,12 @@ class EventResource(Resource):
                 return make_response({'message':'event deleted successfully'}, 201)
 
 api.add_resource(Hello,'/')
+api.add_resource(UserResource,'/user/register')
 api.add_resource(AllEventResource, '/events')
 api.add_resource(EventResource, '/event/<id>')
+
+app.app_context().push() # this is necessary for pushing application contect, so as db.create_all to work
+init_db(db)
 
 if __name__=="__main__":
     app.run(host=HOST,port=8000, debug=True)
