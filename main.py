@@ -4,25 +4,55 @@ from flask_restful import Resource, Api
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
 from sqlalchemy.sql import func
+from werkzeug.security import generate_password_hash, check_password_hash
+import jwt
+
+import uuid
+from datetime import datetime, timedelta
+from functools import wraps
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///events.sqlite3'
+app.config['SECRET_KEY'] = 'd42340e0-7846-40cd-8f66-6f9d2d3ddfbb'
 api = Api(app)
 ma = Marshmallow(app)
 db=SQLAlchemy(app)
 HOST = "0.0.0.0"
 
+REQUIRED_ERROR_TEXT = 'this field is required'
+
+
 def init_db(db):
     """
     this is the function responsible to initiate the db tables which are not there
     """
+    db.drop_all()
     db.create_all()
+
+def tokin_required(func):
+    @wraps
+    def decorated(*args, **kwargs):
+        token = None
+        if 'x-access-token' in request.headers:
+            token = request.header['x-access-token']
+        if not token:
+            return {"message":"Token is missing..."} 
+        try:
+            data = jwt.decode(token,app.config['SECRET_KEY'],)
+            current_user = UserModel.query.filter_by(public_id=data.get('public_id')).first()
+            if not current_user:
+                return {"message":"Token is invalid..."}
+        except:
+            return {'message':'Token is invalid...'}
+        return func(current_user,*args, **kwargs)
+    return decorated
 
 class UserModel(db.Model):
     """
     User model which stores the user information like username, password
     """
     id = db.Column('id',db.Integer, primary_key=True)
+    public_id = db.Column(db.String(50), unique=True, nullable=False)
     username = db.Column(db.String(250), nullable=False, unique=True) # will store the email in here
     password = db.Column(db.String(2000), nullable=False)
 
@@ -54,6 +84,7 @@ class UserResource(Resource):
         data = request.get_json()
         username = data.get('username')
         password = data.get('password')
+        public_id = str(uuid.uuid4())
         REQUIRED_ERROR_TEXT = 'this field is required'
         errors = {}
         if not username:
@@ -64,12 +95,39 @@ class UserResource(Resource):
             errors['password']=REQUIRED_ERROR_TEXT
         if errors:
             return make_response({"message":"Registration Unsuccessful...","errors":errors},400)
-        user = UserModel(username=username, password=password)
+        password = generate_password_hash(password)
+        user = UserModel(username=username, password=password, public_id=public_id)
         db.session.add(user)
         db.session.commit()
         return {"message":"Registration Successful"},201 # this is automatically covert to json and return as response by Flask-Restful
         
-
+class LoginResource(Resource):
+    """
+    Resource for API login
+    """
+    def post(self):
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+        errors={}
+        if not username:
+            errors['username']= REQUIRED_ERROR_TEXT
+        if not password:
+            errors['password']= REQUIRED_ERROR_TEXT
+        if errors:
+            return {'message':'unable to login','errors':errors}, 400
+        user = UserModel.query.filter_by(username=username).first()
+        if not user:
+            return {'message':'Email and password combination is wrong...'}, 401
+        if check_password_hash(user.password,password):
+            token = jwt.encode({
+                'public_id':user.public_id,
+                'exp': datetime.utcnow()+timedelta(minutes=30)
+            }, app.config['SECRET_KEY'])
+            return {"message":"Login Succesful...","token":token}, 201
+        else:
+            return {'message':'Email and password combination is wrong...'}, 401
+    
 class AllEventResource(Resource):
     def get(self):
         """
@@ -142,6 +200,7 @@ class EventResource(Resource):
 
 api.add_resource(Hello,'/')
 api.add_resource(UserResource,'/user/register')
+api.add_resource(LoginResource,'/user/login')
 api.add_resource(AllEventResource, '/events')
 api.add_resource(EventResource, '/event/<id>')
 
