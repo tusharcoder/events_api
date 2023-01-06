@@ -144,7 +144,7 @@ class AllEventResource(Resource):
         """
         An api to return the list of all events
         """
-        events = db.session.query(EventModel).all()
+        events = db.session.query(EventModel).filter_by(created_by=request.user.id)
         result = events_resource_schema.dump(events)
         return make_response(result, 200)
 
@@ -179,6 +179,8 @@ class EventResource(Resource):
         if not event:
             return make_response({'message':'event id not exist...'}, 404)
         else:
+            if not event.created_by == request.user.id:
+                return {"message":"UnAuthorized access..."}, 401
             result = event_resource_schema.dump(event)
             return make_response(result,200)
 
@@ -191,6 +193,8 @@ class EventResource(Resource):
         if not event:
             return make_response({'message':'event id not exist...'}, 404)
         else:
+            if not event.created_by == request.user.id:
+                return {"message":"UnAuthorized access..."}, 401
             data = request.get_json()
             title = data.get('title')
             meeting_link = data.get('meeting_link')
@@ -209,6 +213,8 @@ class EventResource(Resource):
             if not event:
                 return make_response({'message':'event id not exist...'}, 404)
             else:
+                if not event.created_by == request.user.id:
+                    return {"message":"UnAuthorized access..."}, 401
                 db.session.delete(event)
                 db.session.commit()
                 return make_response({'message':'event deleted successfully'}, 201)
