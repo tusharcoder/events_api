@@ -30,21 +30,19 @@ def init_db(db):
     db.create_all()
 
 def tokin_required(func):
-    @wraps
+    @wraps(func)
     def decorated(*args, **kwargs):
         token = None
         if 'x-access-token' in request.headers:
-            token = request.header['x-access-token']
+            token = request.headers['x-access-token']
         if not token:
             return {"message":"Token is missing..."} 
-        try:
-            data = jwt.decode(token,app.config['SECRET_KEY'],)
-            current_user = UserModel.query.filter_by(public_id=data.get('public_id')).first()
-            if not current_user:
-                return {"message":"Token is invalid..."}
-        except:
-            return {'message':'Token is invalid...'}
-        return func(current_user,*args, **kwargs)
+        data = jwt.decode(token,app.config['SECRET_KEY'],algorithms='HS256')
+        current_user = UserModel.query.filter_by(public_id=data.get('public_id')).first()
+        if not current_user:
+            return {"message":"Token is invalid..."}
+        request.user = current_user
+        return func(*args, **kwargs)
     return decorated
 
 class UserModel(db.Model):
@@ -122,13 +120,14 @@ class LoginResource(Resource):
         if check_password_hash(user.password,password):
             token = jwt.encode({
                 'public_id':user.public_id,
-                'exp': datetime.utcnow()+timedelta(minutes=30)
-            }, app.config['SECRET_KEY'])
+                'exp': datetime.utcnow()+timedelta(minutes=30),
+            }, app.config['SECRET_KEY'],algorithm='HS256')
             return {"message":"Login Succesful...","token":token}, 201
         else:
             return {'message':'Email and password combination is wrong...'}, 401
     
 class AllEventResource(Resource):
+    @tokin_required
     def get(self):
         """
         An api to return the list of all events
@@ -137,6 +136,7 @@ class AllEventResource(Resource):
         result = events_resource_schema.dump(events)
         return make_response(result, 200)
 
+    @tokin_required
     def post(self):
         """
         An api to post the event
@@ -158,6 +158,7 @@ class AllEventResource(Resource):
         return make_response({'message':'event created','data':result},201)
 
 class EventResource(Resource):
+    @tokin_required
     def get(self,id):
         """
         An api to return the specific event
@@ -169,6 +170,7 @@ class EventResource(Resource):
             result = event_resource_schema.dump(event)
             return make_response(result,200)
 
+    @tokin_required
     def put(self,id):
         """
         An api to update the specific event
@@ -186,6 +188,7 @@ class EventResource(Resource):
             result = event_resource_schema.dump(event)
             return make_response(result,200)
 
+    @tokin_required
     def delete(self,id):
             """
             An api to delete the specific event
